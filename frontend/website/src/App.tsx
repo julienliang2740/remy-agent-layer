@@ -1,4 +1,4 @@
-﻿import type { AnchorHTMLAttributes } from "react";
+import type { AnchorHTMLAttributes } from "react";
 import {
   ArrowRight,
   Camera,
@@ -181,7 +181,7 @@ function Hero() {
           </h1>
           <p className="max-w-[50ch] text-pretty text-sm leading-relaxed text-earth-700 sm:text-base md:text-[1.05rem]">
             Remy is a calm AI coach for your kitchen. It sees what you have, guides you through the
-            cook with gentle real-time tips, and helps you spend less at the grocery store ” without
+            cook with gentle real-time tips, and helps you spend less at the grocery store — without
             ever making you feel watched.
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -296,7 +296,7 @@ function HowItWorks() {
     {
       n: "02",
       title: "Cook with a calm coach",
-      body: "Point your camera at the pan. Remy nudges in the moment ” heat down, garlic ready, sauce glossy.",
+      body: "Point your camera at the pan. Remy nudges in the moment — heat down, garlic ready, sauce glossy.",
       mock: <CameraMock />,
     },
     {
@@ -334,7 +334,7 @@ const features = [
   {
     eyebrow: "Recipes from what you have",
     title: "No more 'what's for dinner?'",
-    body: "Remy looks at your pantry photos and the chips you've tapped, then suggests something doable ” not aspirational. Always with a realistic time and skill level.",
+    body: "Remy looks at your pantry photos and the chips you've tapped, then suggests something doable — not aspirational. Always with a realistic time and skill level.",
     bullets: [
       "Photo-based ingredient detection",
       "Filters for time, mood & skill",
@@ -345,7 +345,7 @@ const features = [
   {
     eyebrow: "Live camera guidance",
     title: "A coach that's actually there.",
-    body: "Remy watches the pan with you and offers quiet, well-timed nudges. No popups, no lectures ” just the small note you wish someone had said.",
+    body: "Remy watches the pan with you and offers quiet, well-timed nudges. No popups, no lectures — just the small note you wish someone had said.",
     bullets: [
       "Real-time pan & timing cues",
       "Voice or silent mode",
@@ -360,14 +360,14 @@ const features = [
     bullets: [
       "Wins & gentle 'to try' notes",
       "Skill tree progress",
-      "Explainable ” every tip cites why",
+      "Explainable — every tip cites why",
     ],
     mock: <FeedbackMockLarge />,
   },
   {
     eyebrow: "Smarter grocery help",
     title: "Cook well, spend less.",
-    body: "Pine nuts for $9? Try toasted sunflower seeds. Remy suggests honest swaps and flags what's on sale nearby ” no upsells, no affiliate noise.",
+    body: "Pine nuts for $9? Try toasted sunflower seeds. Remy suggests honest swaps and flags what's on sale nearby — no upsells, no affiliate noise.",
     bullets: [
       "Cheaper ingredient swaps",
       "Sale-aware suggestions",
@@ -378,7 +378,7 @@ const features = [
   {
     eyebrow: "Progress that compounds",
     title: "Confidence, one cook at a time.",
-    body: "Each session feeds a quiet skill tree. You'll feel saute, knife work, and seasoning move from 'shaky' to 'second nature' ” without a single notification chasing you.",
+    body: "Each session feeds a quiet skill tree. You'll feel saute, knife work, and seasoning move from 'shaky' to 'second nature' — without a single notification chasing you.",
     bullets: [
       "Skill tree across techniques",
       "Weekly recap, no streaks",
@@ -574,7 +574,7 @@ const faqs = [
   },
   {
     q: "Is cooking the only skill?",
-    a: "It's where we're starting ” kitchens are full of small skills that benefit from a patient coach. More everyday skills are on the way.",
+    a: "It's where we're starting — kitchens are full of small skills that benefit from a patient coach. More everyday skills are on the way.",
   },
 ];
 
@@ -702,7 +702,7 @@ function SiteFooter() {
             <span className="font-serif text-2xl leading-none">Remy</span>
           </Link>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-earth-600">
-            A calm AI coach for the kitchen ” and, one day, for every small skill that makes
+            A calm AI coach for the kitchen — and, one day, for every small skill that makes
             everyday life better.
           </p>
         </div>
@@ -833,7 +833,7 @@ function LiveCookingMock() {
     <div className="relative h-full w-full">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,#5a4838_0%,#241a12_60%,#0a0604_100%)]" />
       <div className="absolute inset-0 opacity-50 mix-blend-overlay bg-[conic-gradient(at_40%_60%,#fdba74,#92400e,#1c1917,#fdba74)]" />
-      <div className="absolute inset-0 grid place-items-center text-[5rem] opacity-30">ðŸ³</div>
+      <div className="absolute inset-0 grid place-items-center text-[5rem] opacity-30">🍳</div>
       {/* Step pill */}
       <div className="absolute left-1/2 top-8 -translate-x-1/2 rounded-full bg-black/30 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur-md">
         <p className="text-[10px] font-medium tracking-wide text-white">
@@ -853,7 +853,7 @@ function LiveCookingMock() {
             Coach · live
           </p>
           <p className="text-pretty text-[12.5px] leading-snug text-earth-950">
-            Garlic looks golden ” ease the heat down a notch.
+            Garlic looks golden — ease the heat down a notch.
           </p>
         </div>
       </div>
@@ -869,10 +869,10 @@ function SwapCard() {
       </div>
       <p className="mt-1.5 text-sm leading-snug">
         <span className="text-earth-600 line-through">Pine nuts</span>{" "}
-        <span className="font-semibold">†’ sunflower seeds</span>
+        <span className="font-semibold">→ sunflower seeds</span>
       </p>
       <div className="mt-2 inline-flex rounded-full bg-leaf-soft px-2 py-0.5 text-[11px] font-semibold text-leaf">
-        ˆ’$4.80
+        -$4.80
       </div>
     </div>
   );
@@ -916,7 +916,7 @@ function CameraMock() {
   return (
     <div className="relative aspect-[4/3] overflow-hidden rounded-2xl">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,#5a4838_0%,#1f160e_70%)]" />
-      <div className="absolute inset-0 grid place-items-center text-4xl opacity-40">ðŸ³</div>
+      <div className="absolute inset-0 grid place-items-center text-4xl opacity-40">🍳</div>
       <div className="absolute inset-x-2 bottom-2 flex gap-2 rounded-xl bg-white/95 p-2.5 backdrop-blur">
         <span className="relative mt-1 flex size-2 shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warm opacity-70" />
@@ -958,7 +958,7 @@ function RecipeMock() {
   return (
     <div className="overflow-hidden rounded-[28px] bg-white ring-1 ring-black/5">
       <div className="relative aspect-[4/3] bg-gradient-to-br from-warm-soft via-earth-100 to-earth-200">
-        <div className="absolute inset-0 grid place-items-center text-7xl opacity-80">ðŸ</div>
+        <div className="absolute inset-0 grid place-items-center text-7xl opacity-80">🍝</div>
         <span className="absolute right-4 top-4 rounded-full bg-canvas/90 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-earth-800 backdrop-blur">
           Suggested
         </span>
@@ -1001,7 +1001,7 @@ function CameraMockLarge() {
     <div className="relative aspect-[4/5] overflow-hidden rounded-[28px] bg-earth-950 shadow-xl ring-1 ring-black/10">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,#5a4838_0%,#241a12_60%,#0a0604_100%)]" />
       <div className="absolute inset-0 opacity-50 mix-blend-overlay bg-[conic-gradient(at_40%_60%,#fdba74,#92400e,#1c1917,#fdba74)]" />
-      <div className="absolute inset-0 grid place-items-center text-7xl opacity-25">ðŸ³</div>
+      <div className="absolute inset-0 grid place-items-center text-7xl opacity-25">🍳</div>
 
       <div className="absolute left-1/2 top-5 -translate-x-1/2 rounded-full bg-black/30 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur">
         <p className="text-[11px] font-medium text-white">Step 4 · Saute the garlic</p>
@@ -1020,7 +1020,7 @@ function CameraMockLarge() {
               Coach
             </p>
             <p className="text-[13px] leading-snug">
-              Garlic is looking golden ” ease the heat down.
+              Garlic is looking golden — ease the heat down.
             </p>
           </div>
         </div>
@@ -1092,10 +1092,10 @@ function SavingsMock() {
           >
             <span>
               <span className="text-earth-600 line-through">{s.from}</span>{" "}
-              <span className="font-semibold">†’ {s.to}</span>
+              <span className="font-semibold">→ {s.to}</span>
             </span>
             <span className="rounded-full bg-leaf-soft px-2 py-0.5 text-[11px] font-semibold text-leaf">
-              ˆ’{s.save}
+              -{s.save}
             </span>
           </li>
         ))}

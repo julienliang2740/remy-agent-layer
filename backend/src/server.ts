@@ -9,15 +9,21 @@
  *        body: raw image bytes, with Content-Type: image/jpeg|png|gif|webp
  *   POST /recipe                  -> { inventory, recipe }
  *        body: JSON { "inventory": DetectionResult, "preference"?: string }
+ *   POST /reviews                 -> stored Review
+ *        body: JSON { recipeId, recipeStars, remyStars, tags? }
+ *   GET  /reviews                 -> { aggregates: { [recipeId]: {count, avgRecipe, avgRemy} } }
  *
- * Example:
- *   curl -s --data-binary @fridge.jpg -H "Content-Type: image/jpeg" \
- *     http://localhost:8787/detect | jq
+ * Cross-cutting: CORS for the app/website dev servers, structured request
+ * logging (request id, route, status, latency, detector), and a sliding-window
+ * rate limit on the model-backed endpoints (/detect, /recipe).
  */
 import "./env.js";
+import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { detectorFromEnv, imageFromBuffer } from "./detector.js";
 import { generateRecipe } from "./recipe.js";
+import { createRateLimiter } from "./rateLimit.js";
+import { ReviewSchema, ReviewStore } from "./reviews.js";
 import {
   DetectionResultSchema,
   SUPPORTED_MEDIA_TYPES,
@@ -27,6 +33,19 @@ import {
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY_BYTES = 25 * 1024 * 1024; // 25 MB — generous for phone photos.
 const detector = detectorFromEnv();
+const reviews = new ReviewStore(process.env.REMY_REVIEWS_PATH ?? "data/reviews.json");
+/** 20 model-backed requests per minute per client — the cost fuse. */
+const limiter = createRateLimiter({ limit: 20, windowMs: 60_000 });
+
+/** One structured line per request: id, route, status, latency, detector. */
+function logRequest(fields: Record<string, unknown>): void {
+  console.log(JSON.stringify({ t: new Date().toISOString(), ...fields }));
+}
+
+function clientKey(req: IncomingMessage): string {
+  const fwd = req.headers["x-forwarded-for"];
+  return (Array.isArray(fwd) ? fwd[0] : fwd)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
+}
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -51,6 +70,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
     "Content-Type": "application/json",
     "Content-Length": Buffer.byteLength(text),
+    "Access-Control-Allow-Origin": "*",
   });
   res.end(text);
 }
@@ -103,9 +123,60 @@ async function handleRecipe(req: IncomingMessage, res: ServerResponse): Promise<
   sendJson(res, 200, { inventory: inventory.data, recipe });
 }
 
+async function handlePostReview(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readBody(req);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.toString("utf8"));
+  } catch {
+    sendJson(res, 400, { error: "body must be valid JSON" });
+    return;
+  }
+  const review = ReviewSchema.safeParse(parsed);
+  if (!review.success) {
+    sendJson(res, 400, { error: "invalid review", details: review.error.issues });
+    return;
+  }
+  sendJson(res, 201, reviews.add(review.data));
+}
+
 const server = createServer((req, res) => {
+  const started = Date.now();
+  const id = randomUUID().slice(0, 8);
   const route = `${req.method} ${(req.url ?? "/").split("?")[0]}`;
+
+  // CORS preflight for browser clients (Expo web on :8082, Vite on :5173).
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    });
+    res.end();
+    return;
+  }
+
+  const finish = (status: number) =>
+    logRequest({
+      id,
+      route,
+      status,
+      ms: Date.now() - started,
+      detector: route === "POST /detect" ? detector.name : undefined,
+    });
+  res.on("finish", () => finish(res.statusCode));
+
   const handle = async (): Promise<void> => {
+    // Rate limit only the endpoints that can spend money.
+    if (route === "POST /detect" || route === "POST /recipe") {
+      const key = clientKey(req);
+      if (!limiter.allow(key)) {
+        res.setHeader("Retry-After", String(limiter.retryAfterSecs(key)));
+        sendJson(res, 429, { error: "rate limited — try again shortly" });
+        return;
+      }
+    }
     switch (route) {
       case "GET /health":
         sendJson(res, 200, { ok: true, detector: detector.name });
@@ -115,6 +186,12 @@ const server = createServer((req, res) => {
         return;
       case "POST /recipe":
         await handleRecipe(req, res);
+        return;
+      case "POST /reviews":
+        await handlePostReview(req, res);
+        return;
+      case "GET /reviews":
+        sendJson(res, 200, { aggregates: reviews.aggregates() });
         return;
       default:
         sendJson(res, 404, { error: `no route for ${route}` });
@@ -129,6 +206,8 @@ const server = createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`remy agent layer listening on http://localhost:${PORT}`);
   console.log(`  detector: ${detector.name}`);
-  console.log(`  POST /detect  (raw image body)`);
-  console.log(`  POST /recipe  (JSON { inventory, preference? })`);
+  console.log(`  POST /detect   (raw image body)`);
+  console.log(`  POST /recipe   (JSON { inventory, preference? })`);
+  console.log(`  POST /reviews  (JSON { recipeId, recipeStars, remyStars, tags? })`);
+  console.log(`  GET  /reviews  (aggregate ratings)`);
 });
