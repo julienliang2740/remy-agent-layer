@@ -20,6 +20,7 @@
 import "./env.js";
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { allowedOrigins, corsOrigin } from "./cors.js";
 import { detectorFromEnv, imageFromBuffer } from "./detector.js";
 import { generateRecipe } from "./recipe.js";
 import { createRateLimiter } from "./rateLimit.js";
@@ -32,10 +33,14 @@ import {
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY_BYTES = 25 * 1024 * 1024; // 25 MB — generous for phone photos.
+const MAX_PREFERENCE_CHARS = 200;
 const detector = detectorFromEnv();
 const reviews = new ReviewStore(process.env.REMY_REVIEWS_PATH ?? "data/reviews.json");
+const CORS_ALLOW = allowedOrigins(process.env.REMY_ALLOWED_ORIGINS);
 /** 20 model-backed requests per minute per client — the cost fuse. */
 const limiter = createRateLimiter({ limit: 20, windowMs: 60_000 });
+/** Reviews are cheap but still writeable — cap abuse separately. */
+const reviewLimiter = createRateLimiter({ limit: 30, windowMs: 60_000 });
 
 /** One structured line per request: id, route, status, latency, detector. */
 function logRequest(fields: Record<string, unknown>): void {
@@ -66,11 +71,12 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
+  // CORS header is set per-request via setHeader in the handler (allowlist),
+  // so it's preserved here without reflecting an arbitrary origin.
   const text = JSON.stringify(body, null, 2);
   res.writeHead(status, {
     "Content-Type": "application/json",
     "Content-Length": Buffer.byteLength(text),
-    "Access-Control-Allow-Origin": "*",
   });
   res.end(text);
 }
@@ -111,14 +117,14 @@ async function handleRecipe(req: IncomingMessage, res: ServerResponse): Promise<
   const obj = parsed as { inventory?: unknown; preference?: unknown };
   const inventory = DetectionResultSchema.safeParse(obj.inventory);
   if (!inventory.success) {
-    sendJson(res, 400, {
-      error: "body.inventory must be a DetectionResult",
-      details: inventory.error.issues,
-    });
+    sendJson(res, 400, { error: "body.inventory must be a DetectionResult" });
     return;
   }
   const recipe = await generateRecipe(inventory.data, {
-    preference: typeof obj.preference === "string" ? obj.preference : undefined,
+    preference:
+      typeof obj.preference === "string"
+        ? obj.preference.slice(0, MAX_PREFERENCE_CHARS)
+        : undefined,
   });
   sendJson(res, 200, { inventory: inventory.data, recipe });
 }
@@ -134,7 +140,7 @@ async function handlePostReview(req: IncomingMessage, res: ServerResponse): Prom
   }
   const review = ReviewSchema.safeParse(parsed);
   if (!review.success) {
-    sendJson(res, 400, { error: "invalid review", details: review.error.issues });
+    sendJson(res, 400, { error: "invalid review" });
     return;
   }
   sendJson(res, 201, reviews.add(review.data));
@@ -145,14 +151,21 @@ const server = createServer((req, res) => {
   const id = randomUUID().slice(0, 8);
   const route = `${req.method} ${(req.url ?? "/").split("?")[0]}`;
 
-  // CORS preflight for browser clients (Expo web on :8082, Vite on :5173).
+  // CORS: echo the Origin only if it's on the allowlist (never a blanket *).
+  const allowOrigin = corsOrigin(req.headers.origin, CORS_ALLOW);
+  if (allowOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", allowOrigin);
+    res.setHeader("Vary", "Origin");
+  }
+
+  // CORS preflight for allowlisted browser clients.
   if (req.method === "OPTIONS") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Max-Age": "86400",
-    });
+    if (allowOrigin) {
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Access-Control-Max-Age", "86400");
+    }
+    res.writeHead(allowOrigin ? 204 : 403);
     res.end();
     return;
   }
@@ -168,11 +181,17 @@ const server = createServer((req, res) => {
   res.on("finish", () => finish(res.statusCode));
 
   const handle = async (): Promise<void> => {
-    // Rate limit only the endpoints that can spend money.
+    // Rate limit the model-backed (cost) endpoints and the writeable one.
+    const key = clientKey(req);
     if (route === "POST /detect" || route === "POST /recipe") {
-      const key = clientKey(req);
       if (!limiter.allow(key)) {
         res.setHeader("Retry-After", String(limiter.retryAfterSecs(key)));
+        sendJson(res, 429, { error: "rate limited — try again shortly" });
+        return;
+      }
+    } else if (route === "POST /reviews") {
+      if (!reviewLimiter.allow(key)) {
+        res.setHeader("Retry-After", String(reviewLimiter.retryAfterSecs(key)));
         sendJson(res, 429, { error: "rate limited — try again shortly" });
         return;
       }
@@ -198,8 +217,9 @@ const server = createServer((req, res) => {
     }
   };
   handle().catch((err) => {
-    const message = err instanceof Error ? err.message : String(err);
-    sendJson(res, 500, { error: message });
+    // Log the real cause server-side; never leak it (could reveal keys/quota).
+    logRequest({ id, route, status: 500, error: err instanceof Error ? err.message : String(err) });
+    sendJson(res, 500, { error: "internal error" });
   });
 });
 

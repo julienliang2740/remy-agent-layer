@@ -40,6 +40,42 @@ test("schema rejects out-of-range and malformed reviews", () => {
   );
 });
 
+test("schema caps lengths so a hostile client can't store giant blobs", () => {
+  assert.equal(
+    ReviewSchema.safeParse({ recipeId: "x".repeat(200), recipeStars: 3, remyStars: 3 }).success,
+    false,
+    "over-long recipeId rejected",
+  );
+  assert.equal(
+    ReviewSchema.safeParse({
+      recipeId: "x",
+      recipeStars: 3,
+      remyStars: 3,
+      tags: Array.from({ length: 50 }, () => "t"),
+    }).success,
+    false,
+    "too many tags rejected",
+  );
+  assert.equal(
+    ReviewSchema.safeParse({
+      recipeId: "x",
+      recipeStars: 3,
+      remyStars: 3,
+      tags: ["a".repeat(100)],
+    }).success,
+    false,
+    "over-long tag rejected",
+  );
+});
+
+test("add() is crash-safe: round-trips after an atomic write", () => {
+  const store = tempStore();
+  store.add({ recipeId: "atomic", recipeStars: 4, remyStars: 4, tags: [] });
+  store.add({ recipeId: "atomic", recipeStars: 2, remyStars: 5, tags: [] });
+  assert.equal(store.list("atomic").length, 2);
+  assert.equal(store.aggregates()["atomic"]?.count, 2);
+});
+
 test("listing with no filter returns everything; empty store is empty", () => {
   const store = tempStore();
   assert.deepEqual(store.list(), []);

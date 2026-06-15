@@ -9,9 +9,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web --port 8082",
     "test": "tsx --test test/*.test.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node --stack-size=8000 node_modules/typescript/bin/tsc --noEmit",
     "eval:grip": "tsx eval/gripEval.ts",
-    "e2e": "expo export --platform web --output-dir dist-web && playwright test"
+    "e2e": "expo export --platform web --output-dir dist-web && playwright test",
+    "eval:action": "tsx eval/actionEval.ts"
   },
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",

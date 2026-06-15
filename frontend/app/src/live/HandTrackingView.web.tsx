@@ -20,6 +20,8 @@ export type HandTrackingStatus = {
   steady: boolean;
   status: string;
   grip: GripResult | null;
+  action: string | null;
+  cameraMoving: boolean;
 };
 
 const C = {
@@ -49,8 +51,15 @@ export default function HandTrackingView({
 
   // Lift tracking state up to the Live screen.
   useEffect(() => {
-    onStatus?.({ present: t.present, steady: t.steady, status: t.status, grip: t.grip });
-  }, [t.present, t.steady, t.status, t.grip, onStatus]);
+    onStatus?.({
+      present: t.present,
+      steady: t.steady,
+      status: t.status,
+      grip: t.grip,
+      action: t.action?.action ?? null,
+      cameraMoving: t.cameraMoving,
+    });
+  }, [t.present, t.steady, t.status, t.grip, t.action, t.cameraMoving, onStatus]);
 
   // Mirror only the front camera; a rear ("environment") feed must not be flipped.
   const mirror = t.facing !== "environment";

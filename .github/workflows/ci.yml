@@ -35,6 +35,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run eval:grip
+      - run: npm run eval:action
       - run: npx expo export --platform web --output-dir dist-web
 
   website:

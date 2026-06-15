@@ -3,6 +3,9 @@ import type { HandLandmarker } from "@mediapipe/tasks-vision";
 import { getHandLandmarker } from "./handLandmarker";
 import { drawHands } from "./draw";
 import { classifyGrip, type GripResult } from "./grip";
+import { createActionTracker, type ActionState } from "./action";
+import { createEgomotionTracker } from "./egomotion";
+import { useDeviceMotion } from "./useDeviceMotion";
 import { smoothLandmarks } from "./smoothing";
 import { createSteadinessTracker } from "./steadiness";
 import type { Hand } from "./types";
@@ -36,6 +39,12 @@ export type HandTracking = {
   fps: number;
   /** Which camera is live. Mirror the view only when this is NOT "environment". */
   facing: Facing;
+  /** Recognized cooking action (camera-invariant), or null. */
+  action: ActionState | null;
+  /** The camera itself (not the hand) is moving. */
+  cameraMoving: boolean;
+  /** Device-motion sensors are active (IMU enhancement on). */
+  imuActive: boolean;
   /** Begin model load → camera → tracking loop. Idempotent. */
   start: () => void;
   /** Switch between front/rear cameras while tracking. */
@@ -64,6 +73,12 @@ export function useHandTracking(): HandTracking {
   const [grip, setGrip] = useState<GripResult | null>(null);
   const [fps, setFps] = useState(0);
   const [facing, setFacing] = useState<Facing>("unknown");
+  const [action, setAction] = useState<ActionState | null>(null);
+  const [cameraMoving, setCameraMoving] = useState(false);
+
+  const imu = useDeviceMotion();
+  const imuRef = useRef(imu);
+  imuRef.current = imu;
 
   const rafRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -71,8 +86,11 @@ export function useHandTracking(): HandTracking {
   const desiredFacingRef = useRef<Facing>("environment");
 
   const trackerRef = useRef(createSteadinessTracker());
+  const actionTrackerRef = useRef(createActionTracker());
+  const egomotionRef = useRef(createEgomotionTracker());
   const prevHandsRef = useRef<Hand[] | null>(null);
   const lastVideoTimeRef = useRef(-1);
+  const lastTickRef = useRef(0);
   const fpsRef = useRef({ frames: 0, since: 0 });
 
   /** Open (or re-open) the camera with the desired facing and bind it to the video. */
@@ -110,6 +128,10 @@ export function useHandTracking(): HandTracking {
     if (startedRef.current) return;
     startedRef.current = true;
 
+    // Same user gesture as the camera permission — ask for motion sensors too
+    // (iOS requires the request to originate from a tap). Best-effort.
+    void imuRef.current.requestPermission();
+
     void (async () => {
       try {
         setStatus("loading-model");
@@ -133,6 +155,11 @@ export function useHandTracking(): HandTracking {
     if (!startedRef.current) return;
     const next: Facing = facing === "environment" ? "user" : "environment";
     desiredFacingRef.current = next;
+    // Flush motion buffers so the camera swap isn't read as a giant pan/flip.
+    actionTrackerRef.current.reset();
+    egomotionRef.current.reset();
+    prevHandsRef.current = null;
+    lastTickRef.current = 0;
     void openStream(next).catch((err) => {
       setError(err instanceof Error ? err.message : "Could not switch camera.");
     });
@@ -157,12 +184,25 @@ export function useHandTracking(): HandTracking {
       const result = landmarker.detectForVideo(video, now);
       const raw = result.landmarks as Hand[];
 
+      const prevHands = prevHandsRef.current;
       const smoothed = raw.map((hand, i) =>
-        smoothLandmarks(prevHandsRef.current?.[i] ?? null, hand, 0.5),
+        smoothLandmarks(prevHands?.[i] ?? null, hand, 0.5),
       );
-      prevHandsRef.current = smoothed;
 
       const st = trackerRef.current.update(smoothed[0] ?? null);
+
+      // dt (s) for the action window + egomotion, clamped against frame drops.
+      const dt = lastTickRef.current ? Math.min(0.1, Math.max(1 / 60, (now - lastTickRef.current) / 1000)) : 1 / 30;
+      lastTickRef.current = now;
+      const curFps = 1 / dt;
+
+      // Camera egomotion (vision + optional IMU), then camera-invariant action.
+      const ego = egomotionRef.current.update(smoothed, prevHands, imuRef.current.latest(now), dt);
+      const act = actionTrackerRef.current.update(smoothed[0] ?? null, {
+        fps: curFps,
+        cameraMoving: ego.cameraMoving,
+      });
+      prevHandsRef.current = smoothed;
 
       const ctx = canvas.getContext("2d");
       if (ctx) drawHands(ctx, smoothed, { steady: st.steady });
@@ -185,6 +225,8 @@ export function useHandTracking(): HandTracking {
       setGrip((prev) => (prev?.grip === g?.grip ? prev : g));
       const m = Math.round(st.motion * 1000) / 1000;
       setMotion((prev) => (prev === m ? prev : m));
+      setAction((prev) => (prev?.action === act.action ? prev : act));
+      setCameraMoving((prev) => (prev === ego.cameraMoving ? prev : ego.cameraMoving));
     };
     tick();
   }
@@ -204,6 +246,9 @@ export function useHandTracking(): HandTracking {
     grip,
     fps,
     facing,
+    action,
+    cameraMoving,
+    imuActive: imu.enabled,
     start,
     flip,
   };

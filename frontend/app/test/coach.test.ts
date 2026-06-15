@@ -70,6 +70,34 @@ test("sustained clean tracking earns positive reinforcement", () => {
   assert.equal(praise?.trigger, "steady-clean-streak");
 });
 
+test("camera-moving suppresses unsteady tips but NOT grip safety", () => {
+  const coach = createCoach();
+  // camera moving + dangerous grip during chop → safety still fires
+  const p = coach.update(ev({ t: 1, cameraMoving: true, grip: EXTENDED }));
+  assert.equal(p?.severity, "safety");
+  // camera moving + safe grip → at most the gentle "steady the camera" tip, never a phantom action/safety
+  const coach2 = createCoach();
+  const q = coach2.update(ev({ t: 1, cameraMoving: true, grip: GUARD, stepType: "prep" }));
+  assert.ok(q === null || q.trigger === "camera-unsteady");
+});
+
+test("action-aware: a stir during a stir step earns rhythm praise; mismatch nudges", () => {
+  const coach = createCoach();
+  // warm into steadiness, then a matching stir action
+  const praise = coach.update(ev({ t: 1, stepType: "stir", action: "stir" }));
+  assert.equal(praise?.trigger, "stir-detected");
+  // a different coach: chopping motion during a stir step → mismatch tip
+  const coach2 = createCoach();
+  const tip = coach2.update(ev({ t: 1, stepType: "stir", action: "chop" }));
+  assert.equal(tip?.trigger, "action-mismatch");
+});
+
+test("action-aware triggers never bypass the steady gate", () => {
+  const coach = createCoach();
+  // not steady, camera still → silent even with a matching action
+  assert.equal(coach.update(ev({ t: 1, steady: false, stepType: "stir", action: "stir" })), null);
+});
+
 test("losing tracking resets the praise streak", () => {
   const coach = createCoach();
   for (let t = 1; t <= 30; t++) coach.update(ev({ t, stepType: "prep" }));

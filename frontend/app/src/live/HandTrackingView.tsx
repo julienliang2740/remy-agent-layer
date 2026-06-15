@@ -16,6 +16,8 @@ export default function HandTrackingView(_props: {
     steady: boolean;
     status: string;
     grip: GripResult | null;
+    action: string | null;
+    cameraMoving: boolean;
   }) => void;
 }) {
   return (

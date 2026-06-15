@@ -14,6 +14,7 @@
  * Pure & clock-injected: feed it events, it returns a phrase or null.
  */
 import type { StepType } from "../data/recipes";
+import type { ActionLabel } from "./action";
 import { COACH_PHRASES, type CoachPhrase, type TriggerId } from "./coachPhrases";
 import type { GripResult } from "./grip";
 
@@ -29,7 +30,14 @@ export type CoachEvent = {
   stepType: StepType;
   /** True on the frame a new step begins. */
   stepEntered?: boolean;
+  /** Recognized action (camera-invariant), if any. */
+  action?: ActionLabel | null;
+  /** The camera (not the hand) is moving — suppresses false steadiness alarms. */
+  cameraMoving?: boolean;
 };
+
+/** stepTypes that have a detectable single-hand action signature. */
+const ACTIONABLE: StepType[] = ["chop", "stir", "transfer", "prep"];
 
 /** Map trigger ids to predicates over the event. */
 const TRIGGERS: Record<TriggerId, (e: CoachEvent) => boolean> = {
@@ -41,6 +49,16 @@ const TRIGGERS: Record<TriggerId, (e: CoachEvent) => boolean> = {
   "steady-clean-streak": () => false, // evaluated specially (needs streak state)
   "step-entered": (e) => e.stepEntered === true,
   "hands-returned": () => false, // evaluated specially (needs absence state)
+  // Action-aware (advisory): only when the action signal is meaningful for the step.
+  "stir-detected": (e) => e.stepType === "stir" && e.action === "stir",
+  "action-mismatch": (e) =>
+    ACTIONABLE.includes(e.stepType) &&
+    e.action != null &&
+    e.action !== "idle" &&
+    e.action !== e.stepType,
+  "no-action-during-step": (e) =>
+    (e.stepType === "chop" || e.stepType === "stir") && e.action === "idle",
+  "camera-unsteady": (e) => e.cameraMoving === true,
 };
 
 export function createCoach(phrases: CoachPhrase[] = COACH_PHRASES) {
@@ -64,11 +82,38 @@ export function createCoach(phrases: CoachPhrase[] = COACH_PHRASES) {
     return p;
   }
 
+  /** Try every safety-severity phrase; return the first eligible one that triggers. */
+  function trySafety(e: CoachEvent): CoachPhrase | null {
+    for (const p of phrases) {
+      if (p.severity !== "safety") continue;
+      if (!eligible(p, e)) continue;
+      if (TRIGGERS[p.trigger](e)) return fire(p, e.t);
+    }
+    return null;
+  }
+
   function update(e: CoachEvent): CoachPhrase | null {
-    // Rule 1: never coach what we can't see.
-    if (!e.present || !e.steady) {
+    // Can't coach what we can't see.
+    if (!e.present) {
       cleanSince = null;
-      if (!e.present) wasAbsent = true;
+      wasAbsent = true;
+      return null;
+    }
+
+    // Camera-moving mode: image steadiness is unreliable, but grip safety
+    // (camera-invariant) still matters, and we may nudge the user to steady the
+    // shot. We do NOT fire steadiness-based tips or false "hold steady" here.
+    if (e.cameraMoving) {
+      cleanSince = null;
+      const safety = trySafety(e);
+      if (safety) return safety;
+      const cam = phrases.find((p) => p.trigger === "camera-unsteady" && eligible(p, e));
+      return cam ? fire(cam, e.t) : null;
+    }
+
+    // Genuine hand unsteadiness (camera still): stay quiet.
+    if (!e.steady) {
+      cleanSince = null;
       return null;
     }
 
@@ -80,11 +125,8 @@ export function createCoach(phrases: CoachPhrase[] = COACH_PHRASES) {
     }
 
     // Rule 3: safety first, throttle-exempt.
-    for (const p of phrases) {
-      if (p.severity !== "safety") continue;
-      if (!eligible(p, e)) continue;
-      if (TRIGGERS[p.trigger](e)) return fire(p, e.t);
-    }
+    const safety = trySafety(e);
+    if (safety) return safety;
 
     // Rule 2: throttled tips/praise from direct triggers.
     for (const p of phrases) {

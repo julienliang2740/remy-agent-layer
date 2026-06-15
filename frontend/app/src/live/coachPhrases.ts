@@ -18,7 +18,11 @@ export type TriggerId =
   | "guard-grip-good"
   | "steady-clean-streak"
   | "step-entered"
-  | "hands-returned";
+  | "hands-returned"
+  | "stir-detected"
+  | "action-mismatch"
+  | "no-action-during-step"
+  | "camera-unsteady";
 
 export type CoachPhrase = {
   id: string;
@@ -102,4 +106,11 @@ export const COACH_PHRASES: CoachPhrase[] = [
   { id: "transfer-tilt-1", trigger: "step-entered", stepTypes: ["transfer"], severity: "tip", cooldownSec: 120, what: "Pour away from yourself.", how: "Tilt the far edge down and let it flow.", why: "Splashes follow the pour line — keep yourself off it." },
   { id: "rest-carry-1", trigger: "step-entered", stepTypes: ["rest"], severity: "tip", cooldownSec: 180, what: "Remember carryover heat.", how: "Food keeps cooking a few degrees after the heat stops.", why: "Resting isn't waiting — it's the last stage of cooking." },
   { id: "praise-return-1", trigger: "guard-grip-good", stepTypes: ["chop"], severity: "praise", cooldownSec: 120, what: "Grip corrected — nicely done.", how: "That's the habit to build.", why: "Self-correcting is the real skill; I just remind." },
+
+  // ——— ACTION-AWARE (advisory; powered by the camera-invariant action layer) ———
+  { id: "stir-rhythm-1", trigger: "stir-detected", stepTypes: ["stir"], severity: "praise", cooldownSec: 120, what: "That's a steady stir.", how: "Keep that easy rhythm going.", why: "Even motion means even cooking and no sticking." },
+  { id: "mismatch-1", trigger: "action-mismatch", stepTypes: ["chop", "stir", "prep", "transfer"], severity: "tip", cooldownSec: 60, what: "That doesn't look like this step.", how: "Glance at the step card — the motion I'm seeing doesn't match it.", why: "Easy to drift a step ahead or behind when your hands are busy." },
+  { id: "no-chop-yet-1", trigger: "no-action-during-step", stepTypes: ["chop"], severity: "tip", cooldownSec: 60, what: "Ready when you are.", how: "Knife down and start when you've got your claw grip set.", why: "No rush — I'll watch the grip once you begin." },
+  { id: "no-stir-yet-1", trigger: "no-action-during-step", stepTypes: ["stir"], severity: "tip", cooldownSec: 60, what: "Give it a stir when you're set.", how: "Scrape the bottom as you go.", why: "Things catch and burn at the base first." },
+  { id: "camera-steady-1", trigger: "camera-unsteady", stepTypes: ["any"], severity: "tip", cooldownSec: 45, what: "The view's moving around.", how: "Prop the phone up or hold it steady so I can see your hands.", why: "I track your hands, not the kitchen — a stable shot helps me help you." },
 ];

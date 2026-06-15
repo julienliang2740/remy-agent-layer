@@ -67,6 +67,7 @@ import {
 } from "@expo-google-fonts/space-grotesk";
 import HandTrackingView from "./live/HandTrackingView";
 import { createCoach } from "./live/coach";
+import type { ActionLabel } from "./live/action";
 import type { GripResult } from "./live/grip";
 import { inferStepType, RECIPES, stepMinutes, type Recipe } from "./data/recipes";
 import {
@@ -277,7 +278,9 @@ export default function App() {
     // The local 18-recipe DB list below it is the offline/error fallback path.
     setFeatured(null);
     setFeaturedState("loading");
-    generateRecipeFromBasket(all)
+    // Honor the dietary preference set in Profile (skip the neutral default).
+    const preference = pref && pref !== "No restrictions" ? pref : undefined;
+    generateRecipeFromBasket(all, preference)
       .then((r) => {
         setFeatured(apiRecipeToRecipe(r));
         setFeaturedState("ready");
@@ -1517,6 +1520,8 @@ type TrackStatus = {
   steady: boolean;
   status: string;
   grip: GripResult | null;
+  action: string | null;
+  cameraMoving: boolean;
 };
 
 function fmtSecs(s: number): string {
@@ -1571,6 +1576,8 @@ function LiveScreen({
     steady: false,
     status: "idle",
     grip: null,
+    action: null,
+    cameraMoving: false,
   });
 
   const steps = recipe.steps;
@@ -1617,6 +1624,8 @@ function LiveScreen({
           grip: tr.grip,
           stepType: recipe.steps[stepRef.current.idx]?.stepType ?? "prep",
           stepEntered: entered,
+          action: tr.action as ActionLabel | null,
+          cameraMoving: tr.cameraMoving,
         });
         if (phrase) {
           setCoachMsg({
@@ -1826,6 +1835,19 @@ function FeedbackScreen({
   const [remyStars, setRemyStars] = useState(0);
   const [tags, setTags] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
+  const [submitState, setSubmitState] = useState<"idle" | "sending" | "error">("idle");
+
+  const submitReview = () => {
+    if (recipeStars + remyStars === 0 || submitState === "sending") return;
+    setSubmitState("sending");
+    // Only call it a success once the backend actually stored it.
+    postReview({ recipeId: recipe.id, recipeStars, remyStars, tags: [...tags] })
+      .then(() => {
+        setSubmitState("idle");
+        setSubmitted(true);
+      })
+      .catch(() => setSubmitState("error"));
+  };
 
   const tagOptions = ["Clear steps", "Well timed", "Too fast", "Want more detail", "Loved it"];
   const toggleTag = (t: string) => {
@@ -1940,21 +1962,21 @@ function FeedbackScreen({
                 styles.reviewSubmit,
                 recipeStars === 0 && remyStars === 0 ? styles.reviewSubmitOff : null,
               ]}
-              onPress={() => {
-                if (recipeStars + remyStars === 0) return;
-                // Persist to the backend review store; UI confirms optimistically
-                // and the POST failure is non-fatal (offline-tolerant).
-                postReview({
-                  recipeId: recipe.id,
-                  recipeStars,
-                  remyStars,
-                  tags: [...tags],
-                }).catch(() => {});
-                setSubmitted(true);
-              }}
+              onPress={submitReview}
             >
-              <Text style={styles.reviewSubmitText}>Submit review</Text>
+              <Text style={styles.reviewSubmitText}>
+                {submitState === "sending"
+                  ? "Saving…"
+                  : submitState === "error"
+                    ? "Couldn't save — tap to retry"
+                    : "Submit review"}
+              </Text>
             </Pressable>
+            {submitState === "error" && (
+              <Text style={styles.reviewErr}>
+                We couldn't reach Remy. Your rating isn't saved yet — try again.
+              </Text>
+            )}
           </>
         )}
       </View>
@@ -4121,6 +4143,12 @@ const styles = StyleSheet.create({
     fontFamily: "DMSans_600SemiBold",
     fontSize: 14,
     color: colors.white,
+  },
+  reviewErr: {
+    marginTop: 8,
+    fontFamily: "DMSans_400Regular",
+    fontSize: 12,
+    color: colors.warm,
   },
 
   // --- flyers / nearby deals ---

@@ -12,6 +12,10 @@ const VALID_TRIGGERS = new Set([
   "steady-clean-streak",
   "step-entered",
   "hands-returned",
+  "stir-detected",
+  "action-mismatch",
+  "no-action-during-step",
+  "camera-unsteady",
 ]);
 
 test("library ships at least 40 phrases", () => {

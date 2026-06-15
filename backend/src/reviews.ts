@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 
@@ -8,10 +8,11 @@ import { z } from "zod";
  * goes through this module. The path is injectable so tests use a temp file.
  */
 export const ReviewSchema = z.object({
-  recipeId: z.string().min(1),
+  // Bounded lengths so a hostile client can't store giant blobs.
+  recipeId: z.string().min(1).max(128),
   recipeStars: z.number().int().min(0).max(5),
   remyStars: z.number().int().min(0).max(5),
-  tags: z.array(z.string()).default([]),
+  tags: z.array(z.string().max(40)).max(12).default([]),
   /** Unix ms; assigned server-side when omitted. */
   at: z.number().optional(),
 });
@@ -39,7 +40,11 @@ export class ReviewStore {
     const stamped = { ...review, at: review.at ?? Date.now() };
     all.push(stamped);
     mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(this.path, JSON.stringify(all, null, 2), "utf8");
+    // Atomic write: a crash mid-write can't truncate/corrupt reviews.json —
+    // write a temp file then rename (atomic on the same filesystem).
+    const tmp = `${this.path}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(all, null, 2), "utf8");
+    renameSync(tmp, this.path);
     return stamped;
   }
 
