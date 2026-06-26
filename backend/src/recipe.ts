@@ -4,6 +4,7 @@ import type { DetectionResult } from "./types.js";
 import { DEFAULT_MODEL } from "./detectors/claudeVision.js";
 import { runStructuredTool } from "./structured.js";
 import { geminiStructured, GEMINI_DEFAULT_MODEL } from "./gemini.js";
+import { openaiStructured, OPENAI_DEFAULT_MODEL } from "./openai.js";
 
 /**
  * Part 1: "start with what you have and conjure a recipe just for you."
@@ -110,6 +111,43 @@ const RECIPE_GEMINI_SCHEMA = {
   ],
 } as const;
 
+/** OpenAI strict JSON Schema mirror of RECIPE_TOOL_SCHEMA. */
+const RECIPE_OPENAI_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    description: { type: "string" },
+    servings: { type: "number" },
+    timeMinutes: { type: "number" },
+    usesFromInventory: { type: "array", items: { type: "string" } },
+    pantryAssumptions: { type: "array", items: { type: "string" } },
+    missingButRecommended: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          why: { type: "string" },
+        },
+        required: ["name", "why"],
+        additionalProperties: false,
+      },
+    },
+    steps: { type: "array", items: { type: "string" } },
+  },
+  required: [
+    "title",
+    "description",
+    "servings",
+    "timeMinutes",
+    "usesFromInventory",
+    "pantryAssumptions",
+    "missingButRecommended",
+    "steps",
+  ],
+  additionalProperties: false,
+} as const;
+
 const RECIPE_SYSTEM_PROMPT = `You are Remy, a warm, practical home-cooking coach. Given an inventory of ingredients someone already has, design ONE achievable recipe that leans on what they have.
 
 Principles:
@@ -136,7 +174,8 @@ export async function generateRecipe(
     opts.mock ??
     (!opts.client &&
       !process.env.ANTHROPIC_API_KEY &&
-      !process.env.GEMINI_API_KEY);
+      !process.env.GEMINI_API_KEY &&
+      !process.env.OPENAI_API_KEY);
   if (useMock) return mockRecipe(inventory);
 
   const inventoryLines = inventory.items
@@ -152,8 +191,8 @@ export async function generateRecipe(
     (opts.preference ? `Preference: ${opts.preference}\n\n` : "") +
     `Design one recipe I can make right now.`;
 
-  // Prefer Gemini (free tier) when its key is set and no explicit Anthropic
-  // client was passed; otherwise use Claude via forced tool use.
+  // Preserve the existing Gemini -> Anthropic priority. OpenAI is the next
+  // configured provider before falling back to the offline recipe.
   if (process.env.GEMINI_API_KEY && !opts.client) {
     const { value } = await geminiStructured(RecipeSchema, {
       apiKey: process.env.GEMINI_API_KEY,
@@ -161,6 +200,23 @@ export async function generateRecipe(
       systemInstruction: RECIPE_SYSTEM_PROMPT,
       parts: [{ text: userText }],
       responseSchema: RECIPE_GEMINI_SCHEMA,
+    });
+    return value;
+  }
+
+  if (
+    process.env.OPENAI_API_KEY &&
+    !process.env.ANTHROPIC_API_KEY &&
+    !opts.client
+  ) {
+    const { value } = await openaiStructured(RecipeSchema, {
+      apiKey: process.env.OPENAI_API_KEY,
+      model: opts.model ?? OPENAI_DEFAULT_MODEL,
+      maxOutputTokens: 4096,
+      system: RECIPE_SYSTEM_PROMPT,
+      userContent: userText,
+      schemaName: "recipe",
+      responseSchema: RECIPE_OPENAI_SCHEMA,
     });
     return value;
   }
@@ -184,7 +240,7 @@ function mockRecipe(inventory: DetectionResult): Recipe {
   const hero = names[0] ?? "whatever you have";
   return {
     title: `Simple ${hero} skillet`,
-    description: `A quick one-pan dish built around your ${hero}. (Offline mock recipe — set GEMINI_API_KEY or ANTHROPIC_API_KEY for a real, tailored recipe.)`,
+    description: `A quick one-pan dish built around your ${hero}. (Offline mock recipe — set GEMINI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY for a real, tailored recipe.)`,
     servings: 2,
     timeMinutes: 25,
     usesFromInventory: names.slice(0, 5),

@@ -36,6 +36,7 @@ flowchart LR
   be --> det{Detector factory}
   det --> gemini[Gemini]
   det --> claude[Claude vision]
+  det --> openai[OpenAI vision]
   det --> mock[Mock · offline]
 
   subgraph server[Server · relaxed latency]
@@ -97,13 +98,13 @@ cd frontend/app && npm install && npm run web        # http://localhost:8082
 cd frontend/website && npm install && npm run dev
 ```
 
-Real detection: put `GEMINI_API_KEY` (free tier) or `ANTHROPIC_API_KEY` in `backend/.env`.
+Real detection: put `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` in `backend/.env`.
 
 ## Quality gates
 
 ```bash
 # backend
-cd backend && npm run typecheck && npm test                 # 17 tests
+cd backend && npm run typecheck && npm test                 # 30 tests
 
 # app
 cd frontend/app && npm run typecheck && npm test            # 35 tests

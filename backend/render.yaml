@@ -1,6 +1,6 @@
 # Render Blueprint. On Render: New -> Blueprint -> connect this repo.
-# Render reads this file, pre-fills everything, and only asks you to paste the
-# GEMINI_API_KEY (it is NOT stored in the repo).
+# Render reads this file and asks for provider keys (they are NOT stored in the
+# repo). At least one real-provider key is needed; otherwise use the mock locally.
 services:
   - type: web
     name: remy-agent-layer
@@ -12,3 +12,7 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false # Render prompts you for this; never committed.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5.4-nano

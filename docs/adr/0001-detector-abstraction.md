@@ -4,21 +4,21 @@ Status: Accepted
 
 ## Context
 The "photo → ingredient inventory" step can be served by several vision
-backends: Google Gemini (free tier), Claude vision (paid, higher quality), or a
-deterministic mock for offline/dev/CI. We did not want the recipe layer, the
-HTTP server, the CLI, or the test suite to know or care which one is active —
-and we wanted the whole pipeline to run with zero credentials so contributors
-and CI are never blocked on an API key.
+backends: Google Gemini (free tier), Claude vision (paid, higher quality),
+OpenAI vision, or a deterministic mock for offline/dev/CI. We did not want the
+recipe layer, the HTTP server, the CLI, or the test suite to know or care which
+one is active — and we wanted the whole pipeline to run with zero credentials
+so contributors and CI are never blocked on an API key.
 
 ## Decision
 Define a single `Detector` interface (`detect(image) → DetectionRun`) in
 `backend/src/types.ts`. Every backend implements it
-(`detectors/{gemini,claudeVision,mock}.ts`). A factory (`detector.ts`,
+(`detectors/{gemini,claudeVision,openai,mock}.ts`). A factory (`detector.ts`,
 `detectorFromEnv`) selects one by environment: Gemini key → Gemini, else
-Anthropic key → Claude, else Mock. All real backends return Zod-validated JSON,
-so a result is always shape-correct or the call throws. The frontend mirrors
-this: `lib/api.ts` calls the backend and the local sample detector is an
-explicit, labeled fallback — never the silent default.
+Anthropic key → Claude, else OpenAI key → OpenAI, else Mock. All real backends
+return Zod-validated JSON, so a result is always shape-correct or the call
+throws. The frontend mirrors this: `lib/api.ts` calls the backend and the local
+sample detector is an explicit, labeled fallback — never the silent default.
 
 ## Consequences
 - Adding a backend (e.g. a fine-tuned local CV model) is one new class, no

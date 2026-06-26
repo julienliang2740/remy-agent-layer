@@ -20,11 +20,12 @@ backend can be swapped without touching the rest of the code.
 
 - **`Detector` interface** ([src/types.ts](src/types.ts)) — the code doesn't care
   *how* detection happens. Swapping backends is one class.
-- **Three backends:**
+- **Four backends:**
   - `GeminiDetector` — **free-tier** Google Gemini vision (raw `fetch`, no SDK).
     The default for deploys: one **server-side** key, $0 at low volume,
     **users never need a key.**
   - `ClaudeVisionDetector` — Claude vision via forced tool use (paid; higher quality).
+  - `OpenAIDetector` — OpenAI vision via the Responses API and strict structured output.
   - `MockDetector` — deterministic fixtures, **no key, offline**. The whole
     pipeline (CLI, server, tests) runs on this.
 - All real backends return **Zod-schema-validated** JSON — a result is always
@@ -40,7 +41,7 @@ cp .env.example .env   # optional — only for REAL detection
 - **No key?** Runs on the mock detector.
 - **Free real detection?** Free Gemini key at https://aistudio.google.com/apikey
   → put `GEMINI_API_KEY=...` in `.env`.
-- **Higher quality?** Set `ANTHROPIC_API_KEY=...` instead (paid).
+- **Other providers?** Set `ANTHROPIC_API_KEY=...` or `OPENAI_API_KEY=...`.
 
 Keys live on the **server only** — the app/website never sends one.
 
@@ -98,14 +99,15 @@ DetectionResult = {
 
 Holds one server-side key; users hit the backend through the app/website.
 
-1. Set `GEMINI_API_KEY` in the host's environment.
+1. Set `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` in the host's environment.
 2. Deploy the Node server (`npm start`) to any Node host. A `render.yaml`
    blueprint is included for one-click Render deploys (build `npm install`,
-   start `npm start`, prompts for `GEMINI_API_KEY`).
+   start `npm start`, prompts for provider keys).
 3. Point the app/website at `https://<host>/detect` and `/recipe`.
 
-> The `GeminiDetector` uses raw `fetch`, so it's also Cloudflare-Workers-compatible
-> (the `http` server would need a small `fetch`-handler wrapper for Workers).
+> The Gemini and OpenAI detectors use raw `fetch`, so those adapters are also
+> Cloudflare-Workers-compatible (the `http` server would need a small
+> `fetch`-handler wrapper for Workers).
 
 ## Configuration
 
@@ -115,7 +117,9 @@ Holds one server-side key; users hit the backend through the app/website.
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini vision model. |
 | `ANTHROPIC_API_KEY` | — | Paid fallback; used if no Gemini key. |
 | `REMY_MODEL` | `claude-opus-4-8` | Claude model. Cheaper: `claude-sonnet-4-6`, `claude-haiku-4-5`. |
-| `REMY_DETECTOR` | auto | Force `gemini` / `claude` / `mock`. Auto = gemini → claude → mock by key presence. |
+| `OPENAI_API_KEY` | — | OpenAI fallback; used if no Gemini or Anthropic key. |
+| `OPENAI_MODEL` | `gpt-5.4-nano` | OpenAI vision and recipe model. |
+| `REMY_DETECTOR` | auto | Force `gemini` / `claude` / `openai` / `mock`. Auto = Gemini → Anthropic → OpenAI → mock. |
 | `PORT` | `8787` | For the HTTP server. |
 
 ## Layout
@@ -128,9 +132,11 @@ src/
   detectors/
     gemini.ts           Free-tier Gemini vision (default)
     claudeVision.ts     Claude vision (forced tool use)
+    openai.ts           OpenAI vision (Responses API)
     mock.ts             Offline deterministic detector
   recipe.ts             Part 1: inventory -> recipe
   gemini.ts             Gemini fetch helper
+  openai.ts             OpenAI structured-output fetch helper
   structured.ts         Claude forced-tool-use helper
   env.ts                Loads .env locally (no-op on hosts)
   cli.ts / recipe-cli.ts / server.ts   entry points

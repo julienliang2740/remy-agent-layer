@@ -5,7 +5,7 @@
  *   npm run detect -- a.jpg b.jpg --merge
  *   npm run detect -- fridge.jpg --json > inventory.json
  *
- * With no ANTHROPIC_API_KEY set, it uses the offline mock detector so you can
+ * With no provider API key set, it uses the offline mock detector so you can
  * try the whole flow immediately.
  */
 import "./env.js";

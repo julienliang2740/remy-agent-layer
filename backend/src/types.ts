@@ -74,7 +74,7 @@ export interface DetectionRun {
     label?: string;
     /** Wall-clock ms for the detection call. */
     elapsedMs: number;
-    /** Token usage when the backend reports it (Claude does; mock doesn't). */
+    /** Token usage when the backend reports it (real providers do; mock doesn't). */
     usage?: { inputTokens: number; outputTokens: number };
   };
 }
