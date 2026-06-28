@@ -31,7 +31,6 @@ import {
   Home,
   ImagePlus,
   MapPin,
-  Mic,
   Pause,
   Plus,
   RefreshCw,
@@ -68,7 +67,9 @@ import {
 import HandTrackingView from "./live/HandTrackingView";
 import { createCoach } from "./live/coach";
 import type { ActionLabel } from "./live/action";
+import type { GestureCommandEvent } from "./live/gestureCommands";
 import type { GripResult } from "./live/grip";
+import { createSpeechCoach, type SpeechSeverity } from "./live/speechCoach";
 import { inferStepType, RECIPES, stepMinutes, type Recipe } from "./data/recipes";
 import {
   combineOwned,
@@ -1522,6 +1523,7 @@ type TrackStatus = {
   grip: GripResult | null;
   action: string | null;
   cameraMoving: boolean;
+  gesture: GestureCommandEvent | null;
 };
 
 function fmtSecs(s: number): string {
@@ -1568,9 +1570,10 @@ function LiveScreen({
   const [step, setStep] = useState(initialStep);
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [micOn, setMicOn] = useState(true);
   const [soundOn, setSoundOn] = useState(true);
+  const [quietMode, setQuietMode] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
+  const [gestureNotice, setGestureNotice] = useState<string | null>(null);
   const [track, setTrack] = useState<TrackStatus>({
     present: false,
     steady: false,
@@ -1578,6 +1581,7 @@ function LiveScreen({
     grip: null,
     action: null,
     cameraMoving: false,
+    gesture: null,
   });
 
   const steps = recipe.steps;
@@ -1587,8 +1591,13 @@ function LiveScreen({
 
   // CV coaching engine: feed tracking events once a second; surface phrases.
   const coachRef = useRef(createCoach());
+  const speechRef = useRef(createSpeechCoach());
+  const soundOnRef = useRef(soundOn);
+  const quietModeRef = useRef(quietMode);
   const trackRef = useRef(track);
   trackRef.current = track;
+  soundOnRef.current = soundOn;
+  quietModeRef.current = quietMode;
   const stepRef = useRef({ idx: step, entered: true });
   const [coachMsg, setCoachMsg] = useState<{ text: string; severity: string; at: number } | null>(
     null,
@@ -1597,6 +1606,20 @@ function LiveScreen({
     stepRef.current = { idx: step, entered: true };
     setShowWhy(false);
   }, [step]);
+
+  const stepInstruction = `Step ${step + 1}. ${current.title}. ${current.body}`;
+
+  useEffect(() => {
+    speechRef.current.setInstruction(stepInstruction);
+    speechRef.current.speak(stepInstruction, {
+      soundOn,
+      quietMode: false,
+      severity: "step",
+      urgent: true,
+    });
+  }, [stepInstruction, soundOn]);
+
+  useEffect(() => () => speechRef.current.stop(), []);
 
   // Step timer ("let it boil") — inferred from the step text.
   const [timer, setTimer] = useState<CookTimer | null>(null);
@@ -1628,10 +1651,25 @@ function LiveScreen({
           cameraMoving: tr.cameraMoving,
         });
         if (phrase) {
+          const text = `${phrase.what} ${phrase.how} ${phrase.why}`;
+          const speechSeverity: SpeechSeverity =
+            phrase.severity === "safety"
+              ? "safety"
+              : phrase.trigger === "camera-unsteady"
+                ? "warning"
+                : phrase.severity === "praise"
+                  ? "praise"
+                  : "tip";
           setCoachMsg({
-            text: `${phrase.what} ${phrase.how} ${phrase.why}`,
+            text,
             severity: phrase.severity,
             at: now,
+          });
+          speechRef.current.speak(text, {
+            soundOn: soundOnRef.current,
+            quietMode: quietModeRef.current,
+            severity: speechSeverity,
+            urgent: speechSeverity === "safety" || speechSeverity === "warning",
           });
         }
         return now;
@@ -1658,9 +1696,68 @@ function LiveScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
+  const trackingWarning =
+    track.status === "error"
+      ? { key: "camera-error", text: "Camera is off. You can still follow the step card." }
+      : track.status === "tracking" && track.cameraMoving
+        ? { key: "camera-moving", text: "The camera is moving too much. Prop the phone up or hold it steady." }
+        : track.status === "tracking" && !track.present && elapsed > 2
+          ? { key: "hands-lost", text: "I lost your hands. Bring them back into frame." }
+          : track.status === "tracking" && track.present && !track.steady && elapsed > 3
+            ? { key: "hands-unsteady", text: "Hold steady for a second so I can lock on." }
+            : null;
+
+  useEffect(() => {
+    if (!trackingWarning || paused) return;
+    speechRef.current.speak(trackingWarning.text, {
+      soundOn,
+      quietMode,
+      severity: "warning",
+      urgent: true,
+    });
+  }, [trackingWarning?.key, paused, soundOn, quietMode]);
+
   const goBack = () => (step > 0 ? setStep(step - 1) : nav("recipe"));
   const goNext = () =>
     isLast ? onFinish(total, total, elapsed) : setStep(step + 1);
+
+  const showGestureNotice = (text: string) => setGestureNotice(text);
+
+  const repeatInstruction = (notice = "Repeating step") => {
+    showGestureNotice(notice);
+    speechRef.current.repeat({ soundOn, quietMode, urgent: true });
+  };
+
+  const lastGestureIdRef = useRef(0);
+  useEffect(() => {
+    const event = track.gesture;
+    if (!event || event.id === lastGestureIdRef.current) return;
+    lastGestureIdRef.current = event.id;
+
+    if (event.command === "toggle_pause") {
+      setPaused((prev) => {
+        const next = !prev;
+        showGestureNotice(next ? "Gesture: Paused" : "Gesture: Resumed");
+        return next;
+      });
+      return;
+    }
+
+    if (event.command === "next_step") {
+      showGestureNotice(isLast ? "Gesture: Finish" : "Gesture: Next step");
+      if (isLast) onFinish(total, total, elapsed);
+      else setStep((prev) => Math.min(prev + 1, total - 1));
+      return;
+    }
+
+    repeatInstruction("Gesture: Repeating step");
+  }, [track.gesture, isLast, total, elapsed, onFinish, soundOn, quietMode]);
+
+  useEffect(() => {
+    if (!gestureNotice) return;
+    const t = setTimeout(() => setGestureNotice(null), 1600);
+    return () => clearTimeout(t);
+  }, [gestureNotice]);
 
   const coaching = coachMsg && elapsed - coachMsg.at < 12 ? coachMsg : null;
   const coachText = coaching
@@ -1715,24 +1812,41 @@ function LiveScreen({
 
         <View style={styles.sideControls}>
           <Pressable
-            style={[styles.liveCircle, !micOn ? styles.liveCircleOff : null]}
-            onPress={() => setMicOn((v) => !v)}
+            accessibilityLabel="Quiet mode"
+            style={[styles.liveCircle, quietMode ? styles.liveCircleActive : null]}
+            onPress={() => setQuietMode((v) => !v)}
           >
-            <Mic size={16} color={micOn ? colors.white : "rgba(255,255,255,0.45)"} />
+            <Bell size={16} color={colors.white} />
           </Pressable>
           <Pressable
+            accessibilityLabel="Sound"
             style={[styles.liveCircle, !soundOn ? styles.liveCircleOff : null]}
             onPress={() => setSoundOn((v) => !v)}
           >
             <Volume2 size={16} color={soundOn ? colors.white : "rgba(255,255,255,0.45)"} />
           </Pressable>
           <Pressable
+            accessibilityLabel={paused ? "Resume" : "Pause"}
             style={[styles.liveCircle, paused ? styles.liveCircleActive : null]}
             onPress={() => setPaused((v) => !v)}
           >
             <Pause size={16} color={colors.white} />
           </Pressable>
+          <Pressable
+            accessibilityLabel="Repeat step"
+            style={styles.liveCircle}
+            onPress={() => repeatInstruction()}
+          >
+            <RefreshCw size={16} color={colors.white} />
+          </Pressable>
         </View>
+
+        {gestureNotice && (
+          <View style={styles.gestureToast}>
+            <Check size={13} color={colors.leaf} />
+            <Text style={styles.gestureToastText}>{gestureNotice}</Text>
+          </View>
+        )}
 
         <View style={styles.liveBottom}>
           <View style={styles.coachBubble}>
@@ -3433,6 +3547,28 @@ const styles = StyleSheet.create({
   },
   liveCircleOff: { opacity: 0.55 },
   liveCircleActive: { backgroundColor: "rgba(217,119,6,0.55)", borderColor: "rgba(251,191,36,0.6)" },
+  gestureToast: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    top: 132,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(5,150,105,0.25)",
+  },
+  gestureToastText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: colors.earth950,
+  },
   liveTimer: {
     marginTop: 6,
     fontFamily: "DMSans_600SemiBold",

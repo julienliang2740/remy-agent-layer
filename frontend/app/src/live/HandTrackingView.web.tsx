@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useHandTracking } from "./useHandTracking";
+import type { GestureCommandEvent } from "./gestureCommands";
 import type { GripResult } from "./grip";
 
 /**
@@ -22,6 +23,7 @@ export type HandTrackingStatus = {
   grip: GripResult | null;
   action: string | null;
   cameraMoving: boolean;
+  gesture: GestureCommandEvent | null;
 };
 
 const C = {
@@ -58,8 +60,9 @@ export default function HandTrackingView({
       grip: t.grip,
       action: t.action?.action ?? null,
       cameraMoving: t.cameraMoving,
+      gesture: t.gesture,
     });
-  }, [t.present, t.steady, t.status, t.grip, t.action, t.cameraMoving, onStatus]);
+  }, [t.present, t.steady, t.status, t.grip, t.action, t.cameraMoving, t.gesture, onStatus]);
 
   // Mirror only the front camera; a rear ("environment") feed must not be flipped.
   const mirror = t.facing !== "environment";

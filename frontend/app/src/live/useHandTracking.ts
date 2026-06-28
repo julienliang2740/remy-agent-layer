@@ -5,6 +5,7 @@ import { drawHands } from "./draw";
 import { classifyGrip, type GripResult } from "./grip";
 import { createActionTracker, type ActionState } from "./action";
 import { createEgomotionTracker } from "./egomotion";
+import { createGestureCommandTracker, type GestureCommandEvent } from "./gestureCommands";
 import { useDeviceMotion } from "./useDeviceMotion";
 import { smoothLandmarks } from "./smoothing";
 import { createSteadinessTracker } from "./steadiness";
@@ -45,6 +46,8 @@ export type HandTracking = {
   cameraMoving: boolean;
   /** Device-motion sensors are active (IMU enhancement on). */
   imuActive: boolean;
+  /** One-shot hands-free command recognized from live hand landmarks. */
+  gesture: GestureCommandEvent | null;
   /** Begin model load → camera → tracking loop. Idempotent. */
   start: () => void;
   /** Switch between front/rear cameras while tracking. */
@@ -75,6 +78,7 @@ export function useHandTracking(): HandTracking {
   const [facing, setFacing] = useState<Facing>("unknown");
   const [action, setAction] = useState<ActionState | null>(null);
   const [cameraMoving, setCameraMoving] = useState(false);
+  const [gesture, setGesture] = useState<GestureCommandEvent | null>(null);
 
   const imu = useDeviceMotion();
   const imuRef = useRef(imu);
@@ -88,6 +92,7 @@ export function useHandTracking(): HandTracking {
   const trackerRef = useRef(createSteadinessTracker());
   const actionTrackerRef = useRef(createActionTracker());
   const egomotionRef = useRef(createEgomotionTracker());
+  const gestureRef = useRef(createGestureCommandTracker());
   const prevHandsRef = useRef<Hand[] | null>(null);
   const lastVideoTimeRef = useRef(-1);
   const lastTickRef = useRef(0);
@@ -158,6 +163,7 @@ export function useHandTracking(): HandTracking {
     // Flush motion buffers so the camera swap isn't read as a giant pan/flip.
     actionTrackerRef.current.reset();
     egomotionRef.current.reset();
+    gestureRef.current.reset();
     prevHandsRef.current = null;
     lastTickRef.current = 0;
     void openStream(next).catch((err) => {
@@ -202,6 +208,17 @@ export function useHandTracking(): HandTracking {
         fps: curFps,
         cameraMoving: ego.cameraMoving,
       });
+      const g = classifyGrip(smoothed[0] ?? null);
+      const gestureEvent = gestureRef.current.update({
+        hand: smoothed[0] ?? null,
+        handCount: smoothed.length,
+        steady: st.steady,
+        grip: g,
+        action: act,
+        cameraMoving: ego.cameraMoving,
+        now,
+      });
+      if (gestureEvent) setGesture(gestureEvent);
       prevHandsRef.current = smoothed;
 
       const ctx = canvas.getContext("2d");
@@ -221,7 +238,6 @@ export function useHandTracking(): HandTracking {
       setPresent((p) => (p === st.present ? p : st.present));
       setSteady((s) => (s === st.steady ? s : st.steady));
       setHandCount((c) => (c === smoothed.length ? c : smoothed.length));
-      const g = classifyGrip(smoothed[0] ?? null);
       setGrip((prev) => (prev?.grip === g?.grip ? prev : g));
       const m = Math.round(st.motion * 1000) / 1000;
       setMotion((prev) => (prev === m ? prev : m));
@@ -249,6 +265,7 @@ export function useHandTracking(): HandTracking {
     action,
     cameraMoving,
     imuActive: imu.enabled,
+    gesture,
     start,
     flip,
   };

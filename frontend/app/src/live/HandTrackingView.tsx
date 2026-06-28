@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import type { GestureCommandEvent } from "./gestureCommands";
 import type { GripResult } from "./grip";
 
 /**
@@ -18,6 +19,7 @@ export default function HandTrackingView(_props: {
     grip: GripResult | null;
     action: string | null;
     cameraMoving: boolean;
+    gesture: GestureCommandEvent | null;
   }) => void;
 }) {
   return (
