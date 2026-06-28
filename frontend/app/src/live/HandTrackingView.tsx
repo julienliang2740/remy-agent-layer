@@ -15,6 +15,7 @@ export default function HandTrackingView(_props: {
   onStatus?: (s: {
     present: boolean;
     steady: boolean;
+    handCount: number;
     status: string;
     grip: GripResult | null;
     action: string | null;

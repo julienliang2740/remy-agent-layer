@@ -19,6 +19,7 @@ import type { GripResult } from "./grip";
 export type HandTrackingStatus = {
   present: boolean;
   steady: boolean;
+  handCount: number;
   status: string;
   grip: GripResult | null;
   action: string | null;
@@ -56,13 +57,14 @@ export default function HandTrackingView({
     onStatus?.({
       present: t.present,
       steady: t.steady,
+      handCount: t.handCount,
       status: t.status,
       grip: t.grip,
       action: t.action?.action ?? null,
       cameraMoving: t.cameraMoving,
       gesture: t.gesture,
     });
-  }, [t.present, t.steady, t.status, t.grip, t.action, t.cameraMoving, t.gesture, onStatus]);
+  }, [t.present, t.steady, t.handCount, t.status, t.grip, t.action, t.cameraMoving, t.gesture, onStatus]);
 
   // Mirror only the front camera; a rear ("environment") feed must not be flipped.
   const mirror = t.facing !== "environment";

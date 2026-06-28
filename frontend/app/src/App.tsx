@@ -47,7 +47,6 @@ import {
   TrendingUp,
   User,
   Utensils,
-  Volume2,
   X,
   Zap,
 } from "lucide-react-native";
@@ -69,7 +68,9 @@ import { createCoach } from "./live/coach";
 import type { ActionLabel } from "./live/action";
 import type { GestureCommandEvent } from "./live/gestureCommands";
 import type { GripResult } from "./live/grip";
-import { createSpeechCoach, type SpeechSeverity } from "./live/speechCoach";
+// Spoken coaching is intentionally disabled for now. Keep the helper around so
+// it can be re-enabled without rebuilding the feature.
+// import { createSpeechCoach, type SpeechSeverity } from "./live/speechCoach";
 import { inferStepType, RECIPES, stepMinutes, type Recipe } from "./data/recipes";
 import {
   combineOwned,
@@ -1519,6 +1520,7 @@ function RecipeScreen({
 type TrackStatus = {
   present: boolean;
   steady: boolean;
+  handCount: number;
   status: string;
   grip: GripResult | null;
   action: string | null;
@@ -1570,13 +1572,16 @@ function LiveScreen({
   const [step, setStep] = useState(initialStep);
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [soundOn, setSoundOn] = useState(true);
-  const [quietMode, setQuietMode] = useState(false);
+  // Spoken coaching is disabled. These controls are kept here as commented
+  // scaffolding for a future re-enable.
+  // const [soundOn, setSoundOn] = useState(true);
+  // const [quietMode, setQuietMode] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
   const [gestureNotice, setGestureNotice] = useState<string | null>(null);
   const [track, setTrack] = useState<TrackStatus>({
     present: false,
     steady: false,
+    handCount: 0,
     status: "idle",
     grip: null,
     action: null,
@@ -1591,13 +1596,13 @@ function LiveScreen({
 
   // CV coaching engine: feed tracking events once a second; surface phrases.
   const coachRef = useRef(createCoach());
-  const speechRef = useRef(createSpeechCoach());
-  const soundOnRef = useRef(soundOn);
-  const quietModeRef = useRef(quietMode);
+  // const speechRef = useRef(createSpeechCoach());
+  // const soundOnRef = useRef(soundOn);
+  // const quietModeRef = useRef(quietMode);
   const trackRef = useRef(track);
   trackRef.current = track;
-  soundOnRef.current = soundOn;
-  quietModeRef.current = quietMode;
+  // soundOnRef.current = soundOn;
+  // quietModeRef.current = quietMode;
   const stepRef = useRef({ idx: step, entered: true });
   const [coachMsg, setCoachMsg] = useState<{ text: string; severity: string; at: number } | null>(
     null,
@@ -1607,19 +1612,20 @@ function LiveScreen({
     setShowWhy(false);
   }, [step]);
 
-  const stepInstruction = `Step ${step + 1}. ${current.title}. ${current.body}`;
-
-  useEffect(() => {
-    speechRef.current.setInstruction(stepInstruction);
-    speechRef.current.speak(stepInstruction, {
-      soundOn,
-      quietMode: false,
-      severity: "step",
-      urgent: true,
-    });
-  }, [stepInstruction, soundOn]);
-
-  useEffect(() => () => speechRef.current.stop(), []);
+  // Spoken step reading is disabled.
+  // const stepInstruction = `Step ${step + 1}. ${current.title}. ${current.body}`;
+  //
+  // useEffect(() => {
+  //   speechRef.current.setInstruction(stepInstruction);
+  //   speechRef.current.speak(stepInstruction, {
+  //     soundOn,
+  //     quietMode: false,
+  //     severity: "step",
+  //     urgent: true,
+  //   });
+  // }, [stepInstruction, soundOn]);
+  //
+  // useEffect(() => () => speechRef.current.stop(), []);
 
   // Step timer ("let it boil") — inferred from the step text.
   const [timer, setTimer] = useState<CookTimer | null>(null);
@@ -1651,26 +1657,28 @@ function LiveScreen({
           cameraMoving: tr.cameraMoving,
         });
         if (phrase) {
+          if (String(phrase.trigger) === "camera-unsteady") return now;
           const text = `${phrase.what} ${phrase.how} ${phrase.why}`;
-          const speechSeverity: SpeechSeverity =
-            phrase.severity === "safety"
-              ? "safety"
-              : phrase.trigger === "camera-unsteady"
-                ? "warning"
-                : phrase.severity === "praise"
-                  ? "praise"
-                  : "tip";
           setCoachMsg({
             text,
             severity: phrase.severity,
             at: now,
           });
-          speechRef.current.speak(text, {
-            soundOn: soundOnRef.current,
-            quietMode: quietModeRef.current,
-            severity: speechSeverity,
-            urgent: speechSeverity === "safety" || speechSeverity === "warning",
-          });
+          // Spoken coach tips are disabled.
+          // const speechSeverity: SpeechSeverity =
+          //   phrase.severity === "safety"
+          //     ? "safety"
+          //     : phrase.trigger === "camera-unsteady"
+          //       ? "warning"
+          //       : phrase.severity === "praise"
+          //         ? "praise"
+          //         : "tip";
+          // speechRef.current.speak(text, {
+          //   soundOn: soundOnRef.current,
+          //   quietMode: quietModeRef.current,
+          //   severity: speechSeverity,
+          //   urgent: speechSeverity === "safety" || speechSeverity === "warning",
+          // });
         }
         return now;
       });
@@ -1696,26 +1704,42 @@ function LiveScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const trackingWarning =
-    track.status === "error"
-      ? { key: "camera-error", text: "Camera is off. You can still follow the step card." }
-      : track.status === "tracking" && track.cameraMoving
-        ? { key: "camera-moving", text: "The camera is moving too much. Prop the phone up or hold it steady." }
-        : track.status === "tracking" && !track.present && elapsed > 2
-          ? { key: "hands-lost", text: "I lost your hands. Bring them back into frame." }
-          : track.status === "tracking" && track.present && !track.steady && elapsed > 3
-            ? { key: "hands-unsteady", text: "Hold steady for a second so I can lock on." }
-            : null;
-
-  useEffect(() => {
-    if (!trackingWarning || paused) return;
-    speechRef.current.speak(trackingWarning.text, {
-      soundOn,
-      quietMode,
-      severity: "warning",
-      urgent: true,
-    });
-  }, [trackingWarning?.key, paused, soundOn, quietMode]);
+  // Spoken tracking warnings are disabled. Visual tracking status still appears
+  // through `coachText` below.
+  // const trackingWarning =
+  //   track.status === "error"
+  //     ? { key: "camera-error", text: "Camera is off. You can still follow the step card." }
+  //     : track.status === "tracking" && track.handCount < 2 && elapsed > 2
+  //       ? {
+  //           key: track.handCount === 0 ? "hands-lost" : "one-hand",
+  //           text:
+  //             track.handCount === 0
+  //               ? "I can't see your hands. Bring both hands into frame."
+  //               : "I can only see one hand. Bring both hands into frame when you can.",
+  //         }
+  //       : track.status === "tracking" && track.present && !track.steady && elapsed > 3
+  //         ? { key: "hands-unsteady", text: "Hold steady for a second so I can lock on." }
+  //         : null;
+  //
+  // useEffect(() => {
+  //   if (!trackingWarning || paused) return;
+  //   const canRepeat =
+  //     trackingWarning.key === "hands-lost" ||
+  //     trackingWarning.key === "one-hand" ||
+  //     trackingWarning.key === "hands-unsteady";
+  //   const speakWarning = () => speechRef.current.speak(trackingWarning.text, {
+  //     soundOn,
+  //     quietMode,
+  //     severity: "warning",
+  //     urgent: true,
+  //   });
+  //
+  //   speakWarning();
+  //   if (!canRepeat) return;
+  //
+  //   const t = setInterval(speakWarning, 5000);
+  //   return () => clearInterval(t);
+  // }, [trackingWarning?.key, trackingWarning?.text, paused, soundOn, quietMode]);
 
   const goBack = () => (step > 0 ? setStep(step - 1) : nav("recipe"));
   const goNext = () =>
@@ -1725,7 +1749,9 @@ function LiveScreen({
 
   const repeatInstruction = (notice = "Repeating step") => {
     showGestureNotice(notice);
-    speechRef.current.repeat({ soundOn, quietMode, urgent: true });
+    // Spoken repeat is disabled; keep the visual confirmation for the repeat
+    // button and pinch gesture.
+    // speechRef.current.repeat({ soundOn, quietMode, urgent: true });
   };
 
   const lastGestureIdRef = useRef(0);
@@ -1751,7 +1777,7 @@ function LiveScreen({
     }
 
     repeatInstruction("Gesture: Repeating step");
-  }, [track.gesture, isLast, total, elapsed, onFinish, soundOn, quietMode]);
+  }, [track.gesture, isLast, total, elapsed, onFinish]);
 
   useEffect(() => {
     if (!gestureNotice) return;
@@ -1770,8 +1796,10 @@ function LiveScreen({
           ? "Camera's off — no problem, you can still follow the steps below."
           : track.status !== "tracking"
             ? "Getting the camera ready…"
-            : !track.present
-              ? "Bring your hands into frame so I can follow along."
+            : track.handCount === 0
+              ? "Bring both hands into frame so I can follow along."
+              : track.handCount === 1
+                ? "I can only see one hand. Bring both hands into frame when you can."
               : !track.steady
                 ? "Hold steady for a second so I can lock on to your hands."
                 : suggestedMin
@@ -1811,20 +1839,22 @@ function LiveScreen({
         </View>
 
         <View style={styles.sideControls}>
-          <Pressable
-            accessibilityLabel="Quiet mode"
-            style={[styles.liveCircle, quietMode ? styles.liveCircleActive : null]}
-            onPress={() => setQuietMode((v) => !v)}
-          >
-            <Bell size={16} color={colors.white} />
-          </Pressable>
-          <Pressable
-            accessibilityLabel="Sound"
-            style={[styles.liveCircle, !soundOn ? styles.liveCircleOff : null]}
-            onPress={() => setSoundOn((v) => !v)}
-          >
-            <Volume2 size={16} color={soundOn ? colors.white : "rgba(255,255,255,0.45)"} />
-          </Pressable>
+          {/* Spoken coaching controls are disabled.
+            <Pressable
+              accessibilityLabel="Quiet mode"
+              style={[styles.liveCircle, quietMode ? styles.liveCircleActive : null]}
+              onPress={() => setQuietMode((v) => !v)}
+            >
+              <Bell size={16} color={colors.white} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Sound"
+              style={[styles.liveCircle, !soundOn ? styles.liveCircleOff : null]}
+              onPress={() => setSoundOn((v) => !v)}
+            >
+              <Volume2 size={16} color={soundOn ? colors.white : "rgba(255,255,255,0.45)"} />
+            </Pressable>
+          */}
           <Pressable
             accessibilityLabel={paused ? "Resume" : "Pause"}
             style={[styles.liveCircle, paused ? styles.liveCircleActive : null]}

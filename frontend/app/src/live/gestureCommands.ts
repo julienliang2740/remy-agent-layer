@@ -40,6 +40,14 @@ const LABEL: Record<GestureCommand, string> = {
   repeat_instruction: "Repeat step",
 };
 
+const RELEASE_GRACE_MS = 220;
+const FINGER_JOINTS: ReadonlyArray<readonly [number, number, number]> = [
+  [5, 6, 8],
+  [9, 10, 12],
+  [13, 14, 16],
+  [17, 18, 20],
+];
+
 function dist(a: Pt, b: Pt): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -59,19 +67,39 @@ function openPalm(input: GestureInput): boolean {
   return validBase(input) && (input.grip?.extendedFingers ?? 0) >= 4;
 }
 
+function foldedFingersForThumbsUp(hand: Hand, scale: number): number {
+  let folded = 0;
+  for (const [mcpIdx, pipIdx, tipIdx] of FINGER_JOINTS) {
+    const mcp = hand[mcpIdx]!;
+    const pip = hand[pipIdx]!;
+    const tip = hand[tipIdx]!;
+    const closeToPalm = dist(tip, mcp) < scale * 0.85;
+    const notPointingUp = tip.y > pip.y - scale * 0.08;
+    if (closeToPalm || notPointingUp) folded++;
+  }
+  return folded;
+}
+
 function thumbsUp(input: GestureInput): boolean {
-  if (!validBase(input) || (input.grip?.curledFingers ?? 0) < 3) return false;
+  if (!validBase(input)) return false;
   const hand = input.hand;
   const wrist = hand[0]!;
+  const thumbMcp = hand[2]!;
   const thumbIp = hand[3]!;
   const thumbTip = hand[4]!;
   const indexMcp = hand[5]!;
+  const indexTip = hand[8]!;
   const scale = palmScale(hand);
   if (scale <= 0) return false;
 
-  const thumbRises = thumbTip.y < thumbIp.y - scale * 0.18 && thumbTip.y < indexMcp.y;
-  const thumbExtends = dist(thumbTip, wrist) > dist(thumbIp, wrist) * 1.06;
-  return thumbRises && thumbExtends;
+  const foldedFingers = Math.max(input.grip?.curledFingers ?? 0, foldedFingersForThumbsUp(hand, scale));
+  if (foldedFingers < 3) return false;
+
+  const thumbRises = thumbTip.y < thumbIp.y - scale * 0.06 && thumbTip.y < indexMcp.y + scale * 0.1;
+  const thumbExtends = dist(thumbTip, wrist) > dist(thumbIp, wrist) * 1.01;
+  const thumbAwayFromFingers = dist(thumbTip, indexTip) > scale * 0.55;
+  const thumbLongEnough = dist(thumbTip, thumbMcp) > scale * 0.45;
+  return thumbRises && thumbExtends && thumbAwayFromFingers && thumbLongEnough;
 }
 
 function pinch(input: GestureInput): boolean {
@@ -92,6 +120,7 @@ function detectPose(input: GestureInput): GestureCommand | null {
 export function createGestureCommandTracker() {
   let candidate: GestureCommand | null = null;
   let since = 0;
+  let lastPoseAt = -Infinity;
   let latched: GestureCommand | null = null;
   let nextId = 1;
   const lastFired: Record<GestureCommand, number> = {
@@ -104,11 +133,14 @@ export function createGestureCommandTracker() {
     const pose = detectPose(input);
 
     if (!pose) {
+      if (candidate && input.now - lastPoseAt <= RELEASE_GRACE_MS) return null;
       candidate = null;
       latched = null;
       since = 0;
       return null;
     }
+
+    lastPoseAt = input.now;
 
     if (pose !== candidate) {
       candidate = pose;
@@ -128,6 +160,7 @@ export function createGestureCommandTracker() {
   function reset(): void {
     candidate = null;
     latched = null;
+    lastPoseAt = -Infinity;
     since = 0;
   }
 

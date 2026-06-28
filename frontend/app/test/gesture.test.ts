@@ -35,6 +35,25 @@ test("thumbs up maps to next step after the hold threshold", () => {
   assert.equal(tracker.update(input(hand, 700))?.command, "next_step");
 });
 
+test("thumbs up accepts a slightly shallow real-world thumb angle", () => {
+  const tracker = createGestureCommandTracker();
+  const hand = makeHand([true, true, true, true]);
+  hand[4] = { ...hand[4]!, y: hand[3]!.y - 0.04 };
+
+  assert.equal(tracker.update(input(hand, 0)), null);
+  assert.equal(tracker.update(input(hand, 700))?.command, "next_step");
+});
+
+test("thumbs up hold survives a brief landmark flicker", () => {
+  const tracker = createGestureCommandTracker();
+  const hand = makeHand([true, true, true, true]);
+  const flicker = { ...input(hand, 120), steady: false };
+
+  assert.equal(tracker.update(input(hand, 0)), null);
+  assert.equal(tracker.update(flicker), null);
+  assert.equal(tracker.update(input(hand, 700))?.command, "next_step");
+});
+
 test("pinch maps to repeat instruction and wins over open palm", () => {
   const tracker = createGestureCommandTracker();
   const hand = makeHand([false, false, false, false]);
