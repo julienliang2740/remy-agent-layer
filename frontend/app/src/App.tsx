@@ -27,7 +27,9 @@ import {
   ChefHat,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   Flame,
+  Hand,
   Home,
   ImagePlus,
   MapPin,
@@ -47,6 +49,7 @@ import {
   TrendingUp,
   User,
   Utensils,
+  Volume2,
   X,
   Zap,
 } from "lucide-react-native";
@@ -68,9 +71,7 @@ import { createCoach } from "./live/coach";
 import type { ActionLabel } from "./live/action";
 import type { GestureCommandEvent } from "./live/gestureCommands";
 import type { GripResult } from "./live/grip";
-// Spoken coaching is intentionally disabled for now. Keep the helper around so
-// it can be re-enabled without rebuilding the feature.
-// import { createSpeechCoach, type SpeechSeverity } from "./live/speechCoach";
+import { createSpeechCoach } from "./live/speechCoach";
 import { inferStepType, RECIPES, stepMinutes, type Recipe } from "./data/recipes";
 import {
   combineOwned,
@@ -1572,12 +1573,12 @@ function LiveScreen({
   const [step, setStep] = useState(initialStep);
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
-  // Spoken coaching is disabled. These controls are kept here as commented
-  // scaffolding for a future re-enable.
-  // const [soundOn, setSoundOn] = useState(true);
+  // Sound is intentionally limited to step narration and manual/gesture repeat.
+  const [soundOn, setSoundOn] = useState(true);
   // const [quietMode, setQuietMode] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
   const [gestureNotice, setGestureNotice] = useState<string | null>(null);
+  const [showGestureHelp, setShowGestureHelp] = useState(false);
   const [track, setTrack] = useState<TrackStatus>({
     present: false,
     steady: false,
@@ -1596,12 +1597,10 @@ function LiveScreen({
 
   // CV coaching engine: feed tracking events once a second; surface phrases.
   const coachRef = useRef(createCoach());
-  // const speechRef = useRef(createSpeechCoach());
-  // const soundOnRef = useRef(soundOn);
+  const speechRef = useRef(createSpeechCoach());
   // const quietModeRef = useRef(quietMode);
   const trackRef = useRef(track);
   trackRef.current = track;
-  // soundOnRef.current = soundOn;
   // quietModeRef.current = quietMode;
   const stepRef = useRef({ idx: step, entered: true });
   const [coachMsg, setCoachMsg] = useState<{ text: string; severity: string; at: number } | null>(
@@ -1612,20 +1611,19 @@ function LiveScreen({
     setShowWhy(false);
   }, [step]);
 
-  // Spoken step reading is disabled.
-  // const stepInstruction = `Step ${step + 1}. ${current.title}. ${current.body}`;
-  //
-  // useEffect(() => {
-  //   speechRef.current.setInstruction(stepInstruction);
-  //   speechRef.current.speak(stepInstruction, {
-  //     soundOn,
-  //     quietMode: false,
-  //     severity: "step",
-  //     urgent: true,
-  //   });
-  // }, [stepInstruction, soundOn]);
-  //
-  // useEffect(() => () => speechRef.current.stop(), []);
+  const stepInstruction = `Step ${step + 1}. ${current.title}. ${current.body}`;
+
+  useEffect(() => {
+    speechRef.current.setInstruction(stepInstruction);
+    speechRef.current.speak(stepInstruction, {
+      soundOn,
+      quietMode: false,
+      severity: "step",
+      urgent: true,
+    });
+  }, [stepInstruction, soundOn]);
+
+  useEffect(() => () => speechRef.current.stop(), []);
 
   // Step timer ("let it boil") — inferred from the step text.
   const [timer, setTimer] = useState<CookTimer | null>(null);
@@ -1749,9 +1747,7 @@ function LiveScreen({
 
   const repeatInstruction = (notice = "Repeating step") => {
     showGestureNotice(notice);
-    // Spoken repeat is disabled; keep the visual confirmation for the repeat
-    // button and pinch gesture.
-    // speechRef.current.repeat({ soundOn, quietMode, urgent: true });
+    speechRef.current.repeat({ soundOn, quietMode: false, urgent: true });
   };
 
   const lastGestureIdRef = useRef(0);
@@ -1777,7 +1773,7 @@ function LiveScreen({
     }
 
     repeatInstruction("Gesture: Repeating step");
-  }, [track.gesture, isLast, total, elapsed, onFinish]);
+  }, [track.gesture, isLast, total, elapsed, onFinish, soundOn]);
 
   useEffect(() => {
     if (!gestureNotice) return;
@@ -1839,22 +1835,18 @@ function LiveScreen({
         </View>
 
         <View style={styles.sideControls}>
-          {/* Spoken coaching controls are disabled.
-            <Pressable
-              accessibilityLabel="Quiet mode"
-              style={[styles.liveCircle, quietMode ? styles.liveCircleActive : null]}
-              onPress={() => setQuietMode((v) => !v)}
-            >
+          {/* Quiet mode and spoken coaching tips are disabled.
+            <Pressable accessibilityLabel="Quiet mode" style={styles.liveCircle}>
               <Bell size={16} color={colors.white} />
             </Pressable>
-            <Pressable
-              accessibilityLabel="Sound"
-              style={[styles.liveCircle, !soundOn ? styles.liveCircleOff : null]}
-              onPress={() => setSoundOn((v) => !v)}
-            >
-              <Volume2 size={16} color={soundOn ? colors.white : "rgba(255,255,255,0.45)"} />
-            </Pressable>
           */}
+          <Pressable
+            accessibilityLabel={soundOn ? "Mute step voice" : "Unmute step voice"}
+            style={[styles.liveCircle, !soundOn ? styles.liveCircleOff : null]}
+            onPress={() => setSoundOn((v) => !v)}
+          >
+            <Volume2 size={16} color={soundOn ? colors.white : "rgba(255,255,255,0.45)"} />
+          </Pressable>
           <Pressable
             accessibilityLabel={paused ? "Resume" : "Pause"}
             style={[styles.liveCircle, paused ? styles.liveCircleActive : null]}
@@ -1869,7 +1861,38 @@ function LiveScreen({
           >
             <RefreshCw size={16} color={colors.white} />
           </Pressable>
+          <Pressable
+            accessibilityLabel={showGestureHelp ? "Close gesture help" : "Open gesture help"}
+            style={[styles.liveCircle, showGestureHelp ? styles.liveCircleActive : null]}
+            onPress={() => setShowGestureHelp((v) => !v)}
+          >
+            <CircleHelp size={16} color={colors.white} />
+          </Pressable>
         </View>
+
+        {showGestureHelp && (
+          <View style={styles.gestureHelpCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.gestureHelpTitleRow}>
+                <Hand size={15} color={colors.leaf} />
+                <Text style={styles.gestureHelpTitle}>Gesture controls</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close gesture help"
+                onPress={() => setShowGestureHelp(false)}
+                hitSlop={8}
+              >
+                <X size={15} color={colors.earth600} />
+              </Pressable>
+            </View>
+            <Text style={styles.gestureHelpLead}>Use one steady hand in frame.</Text>
+            <View style={styles.gestureHelpList}>
+              <Text style={styles.gestureHelpItem}>Open palm: pause or resume</Text>
+              <Text style={styles.gestureHelpItem}>Thumbs up: next step</Text>
+              <Text style={styles.gestureHelpItem}>Pinch: repeat step</Text>
+            </View>
+          </View>
+        )}
 
         {gestureNotice && (
           <View style={styles.gestureToast}>
@@ -3577,6 +3600,48 @@ const styles = StyleSheet.create({
   },
   liveCircleOff: { opacity: 0.55 },
   liveCircleActive: { backgroundColor: "rgba(217,119,6,0.55)", borderColor: "rgba(251,191,36,0.6)" },
+  gestureHelpCard: {
+    position: "absolute",
+    right: 68,
+    top: "38%",
+    width: 260,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  gestureHelpTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  gestureHelpTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 13,
+    color: colors.earth950,
+  },
+  gestureHelpLead: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: colors.leafSoft,
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: colors.leaf,
+  },
+  gestureHelpList: {
+    marginTop: 10,
+    gap: 6,
+  },
+  gestureHelpItem: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.earth800,
+  },
   gestureToast: {
     position: "absolute",
     left: 16,

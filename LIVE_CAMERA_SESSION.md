@@ -8,6 +8,7 @@ This guide explains what happens during Remy's live camera cooking mode and how 
 - Tracks your hands in the browser using MediaPipe.
 - Watches for hand presence, hand steadiness, grip shape, and basic cooking motions.
 - Gives visual coaching in the live coach bubble.
+- Speaks the current step and repeated step instructions when sound is on.
 - Lets you control the session hands-free with simple gestures.
 - Supports pause/resume, repeat instruction, step navigation, and step timers.
 - Keeps live video on-device. Live camera frames are not uploaded to the backend.
@@ -15,12 +16,13 @@ This guide explains what happens during Remy's live camera cooking mode and how 
 ## Hands-Free Gesture Controls
 
 Use one steady hand in frame. Hold the gesture briefly until Remy confirms it.
+Tap the `?` button in live mode to open or close this reminder.
 
 | Gesture | What It Does | How To Do It |
 | --- | --- | --- |
 | Open palm | Pause or resume cooking | Hold an open palm steady in frame. |
 | Thumbs up | Go to the next step | Curl your fingers and hold a clear thumbs up. |
-| Pinch | Show a repeat-step confirmation | Pinch thumb and index finger together. |
+| Pinch | Repeat the current step | Pinch thumb and index finger together. |
 
 When a gesture is recognized, Remy shows a short confirmation such as:
 
@@ -93,14 +95,19 @@ These motion checks are basic and may miss real cooking movements.
 
 ## Spoken Coaching
 
-Spoken coaching is currently disabled because it was too noisy.
+Spoken coaching is intentionally limited right now.
 
-The implementation is still kept in the code as commented-out scaffolding, but live mode does not currently speak:
+Remy speaks:
 
 - Step changes.
-- Safety warnings.
-- Tracking warnings.
-- Cooking tips.
+- Repeated step instructions from the repeat button or pinch gesture.
+
+Remy does not currently speak:
+
+- Hand placement reminders.
+- Camera reminders.
+- Safety tips.
+- General cooking tips.
 - Positive feedback.
 
 ## Quiet Mode
@@ -114,7 +121,7 @@ You can repeat the current step in two ways:
 - Tap the repeat button in live mode.
 - Use the pinch gesture.
 
-Right now, repeat shows a visual confirmation only because spoken coaching is disabled.
+Repeat shows a visual confirmation and repeats the current step aloud when sound is on.
 
 ## Timers
 
@@ -147,5 +154,5 @@ While paused:
 - Remy does not detect ingredients, food doneness, heat, steam, smoke, pans, utensils, or knives directly.
 - Gestures work best with one steady hand in frame.
 - Gesture detection favors missing a gesture over accidentally triggering one.
-- Spoken coaching is intentionally disabled for now.
+- Spoken coaching is limited to step narration and repeat.
 - Live camera frames stay on-device and are not sent to the backend.
