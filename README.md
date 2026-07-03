@@ -4,6 +4,10 @@
 
 Remy watches your hands while you cook (grip safety, steadiness, step timing) entirely on-device, and uses a server only for the slow work: turning fridge photos into an ingredient inventory, generating a recipe from your basket, and post-cook feedback.
 
+<img width="2146" height="1608" alt="image (1)" src="https://github.com/user-attachments/assets/969e6c44-9923-4769-a114-ef56b31487be" />
+<img width="1920" height="1080" alt="remy-live-02-salmon" src="https://github.com/user-attachments/assets/008c7ddd-e16d-4deb-bbb0-5b31a07e6435" />
+
+
 ```
 remy-mono/
 ├── backend/          Agent layer: image → inventory → recipe, + HTTP API (Node, Zod, zero-dep server)
